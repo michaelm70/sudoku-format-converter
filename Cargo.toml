@@ -1,0 +1,8 @@
+[package]
+name = "sudoku-format-converter"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Converts sudoku puzzles between a compact line format and a block grid format"
+
+[dependencies]
