@@ -41,6 +41,9 @@ only reshapes cells, it doesn't check sudoku rules.
 ## Usage
 
 The binary reads a puzzle from stdin and writes the converted form to stdout.
+The direction (`to-line` or `to-block`) is optional; if you leave it off, the
+CLI looks at the shape of the input (one non-blank line vs. nine) and
+converts to the other format.
 
 ```
 $ cat puzzle.txt
@@ -56,7 +59,7 @@ $ cat puzzle.txt
 ... 419 ..5
 ... .8. .97
 
-$ cargo run --quiet -- to-line < puzzle.txt
+$ cargo run --quiet -- < puzzle.txt
 53..7....6..195....98....6.8...6...34..8.3..17...2...6.6....28....419..5....8..97
 ```
 
@@ -64,7 +67,7 @@ And the other direction:
 
 ```
 $ echo "53..7....6..195....98....6.8...6...34..8.3..17...2...6.6....28....419..5....8..97" \
-    | cargo run --quiet -- to-block
+    | cargo run --quiet --
 53. .7. ...
 6.. 195 ...
 .98 ... .6.
@@ -78,6 +81,10 @@ $ echo "53..7....6..195....98....6.8...6...34..8.3..17...2...6.6....28....419..5
 ... .8. .97
 ```
 
+Pass `to-line` or `to-block` explicitly to pick the direction yourself; this
+is also the only way to convert input whose shape is ambiguous (auto-detect
+only recognizes exactly one non-blank line or exactly nine).
+
 Malformed input (wrong length, wrong row count, a stray letter) produces an
 error message on stderr and a non-zero exit code instead of a guess.
 
@@ -85,8 +92,9 @@ error message on stderr and a non-zero exit code instead of a guess.
 
 Format conversion in both directions works and has a table-driven test suite
 covering the awkward cases (CRLF line endings, `0` vs `.` for blanks, missing
-or extra blank lines, malformed rows). It does not yet validate that a parsed
-board is a legal sudoku, and the CLI only reads from stdin.
+or extra blank lines, malformed rows). The CLI can auto-detect which
+direction to convert, but it does not yet validate that a parsed board is a
+legal sudoku, and it only reads from stdin.
 
 ## License
 

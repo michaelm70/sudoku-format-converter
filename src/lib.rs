@@ -120,6 +120,28 @@ pub fn parse_block(input: &str) -> Result<Board, ConvertError> {
     Ok(board)
 }
 
+/// Which of the two text formats a chunk of input looks like.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Format {
+    Line,
+    Block,
+}
+
+/// Guesses the format of `input` from its shape alone (how many non-blank
+/// lines it has), without checking whether the characters on those lines
+/// are valid cells. A single non-blank line looks like the line format;
+/// nine non-blank lines look like the block format. Anything else is
+/// ambiguous and returns `None`, leaving the caller to report an error
+/// with a source-specific message.
+pub fn detect_format(input: &str) -> Option<Format> {
+    let non_blank_lines = input.lines().filter(|line| !line.trim().is_empty()).count();
+    match non_blank_lines {
+        1 => Some(Format::Line),
+        9 => Some(Format::Block),
+        _ => None,
+    }
+}
+
 /// Formats a board as the block format, with a blank line after the 3rd and
 /// 6th rows and no trailing newline.
 pub fn format_block(board: &Board) -> String {
@@ -316,6 +338,27 @@ mod tests {
                 found: 8
             })
         );
+    }
+
+    #[test]
+    fn detect_format_recognizes_line_input() {
+        let line = format_line(&sparse_board());
+        assert_eq!(detect_format(&line), Some(Format::Line));
+        assert_eq!(detect_format(&format!("\n\n{}\n\n", line)), Some(Format::Line));
+    }
+
+    #[test]
+    fn detect_format_recognizes_block_input() {
+        let block = format_block(&sparse_board());
+        assert_eq!(detect_format(&block), Some(Format::Block));
+        assert_eq!(detect_format(&format!("\n{}\n", block)), Some(Format::Block));
+    }
+
+    #[test]
+    fn detect_format_is_ambiguous_for_other_line_counts() {
+        assert_eq!(detect_format(""), None);
+        assert_eq!(detect_format("   \n\n  "), None);
+        assert_eq!(detect_format("one\ntwo\nthree"), None);
     }
 
     #[test]
