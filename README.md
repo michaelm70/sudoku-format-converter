@@ -88,13 +88,36 @@ only recognizes exactly one non-blank line or exactly nine).
 Malformed input (wrong length, wrong row count, a stray letter) produces an
 error message on stderr and a non-zero exit code instead of a guess.
 
+Once a board parses, it is checked for duplicate digits in any row, column,
+or 3x3 box. Conversion still happens either way - the two formats don't
+encode sudoku's rules, so this is a warning rather than a rejection - but
+each duplicate is printed to stderr:
+
+```
+$ echo "55..7....6..195....98....6.8...6...34..8.3..17...2...6.6....28....419..5....8..97" \
+    | cargo run --quiet --
+warning: digit 5 repeats in row 0
+warning: digit 5 repeats in box 0
+55. .7. ...
+6.. 195 ...
+.98 ... .6.
+
+8.. .6. ..3
+4.. 8.3 ..1
+7.. .2. ..6
+
+.6. ... 28.
+... 419 ..5
+... .8. .97
+```
+
 ## Status
 
 Format conversion in both directions works and has a table-driven test suite
 covering the awkward cases (CRLF line endings, `0` vs `.` for blanks, missing
 or extra blank lines, malformed rows). The CLI can auto-detect which
-direction to convert, but it does not yet validate that a parsed board is a
-legal sudoku, and it only reads from stdin.
+direction to convert and warns about duplicate digits in a parsed board, but
+it only reads from stdin.
 
 ## License
 

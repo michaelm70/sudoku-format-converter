@@ -120,6 +120,69 @@ pub fn parse_block(input: &str) -> Result<Board, ConvertError> {
     Ok(board)
 }
 
+/// A duplicate digit found while validating a parsed board. Parsing only
+/// checks that the text is well-formed; a board can parse cleanly and still
+/// not be a legal sudoku puzzle, which is what [`validate`] checks for.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Conflict {
+    Row { row: usize, digit: u8 },
+    Column { col: usize, digit: u8 },
+    Box { index: usize, digit: u8 },
+}
+
+impl std::fmt::Display for Conflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Conflict::Row { row, digit } => write!(f, "digit {} repeats in row {}", digit, row),
+            Conflict::Column { col, digit } => {
+                write!(f, "digit {} repeats in column {}", digit, col)
+            }
+            Conflict::Box { index, digit } => {
+                write!(f, "digit {} repeats in box {}", digit, index)
+            }
+        }
+    }
+}
+
+/// Returns, in ascending order, each digit that appears more than once among
+/// the given cell indices. Blank cells (0) are ignored.
+fn duplicates_in(board: &Board, indices: impl Iterator<Item = usize>) -> impl Iterator<Item = u8> {
+    let mut counts = [0u8; 10];
+    for i in indices {
+        let digit = board[i];
+        if digit != 0 {
+            counts[digit as usize] += 1;
+        }
+    }
+    (1..=9).filter(move |&d| counts[d as usize] > 1)
+}
+
+/// Finds every duplicate digit in `board`: the same digit appearing twice in
+/// a row, a column, or one of the nine 3x3 boxes. Boxes are numbered 0-8 in
+/// row-major order (0 is top-left, 8 is bottom-right). An empty result means
+/// the board obeys sudoku's uniqueness rules; it says nothing about whether
+/// the board has a solution.
+pub fn validate(board: &Board) -> Vec<Conflict> {
+    let mut conflicts = Vec::new();
+
+    for row in 0..9 {
+        let indices = (0..9).map(move |col| row * 9 + col);
+        conflicts.extend(duplicates_in(board, indices).map(|digit| Conflict::Row { row, digit }));
+    }
+    for col in 0..9 {
+        let indices = (0..9).map(move |row| row * 9 + col);
+        conflicts.extend(duplicates_in(board, indices).map(|digit| Conflict::Column { col, digit }));
+    }
+    for index in 0..9 {
+        let box_row = (index / 3) * 3;
+        let box_col = (index % 3) * 3;
+        let indices = (0..9).map(move |i| (box_row + i / 3) * 9 + box_col + i % 3);
+        conflicts.extend(duplicates_in(board, indices).map(|digit| Conflict::Box { index, digit }));
+    }
+
+    conflicts
+}
+
 /// Which of the two text formats a chunk of input looks like.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Format {
@@ -368,5 +431,90 @@ mod tests {
             parse_block(&block),
             Err(ConvertError::InvalidChar { .. })
         ));
+    }
+
+    // A completed, legal solution built from the standard "shift by 3 within
+    // a band, shift by 1 between bands" pattern, which makes every row,
+    // column, and box a permutation of 1-9.
+    fn solved_board() -> Board {
+        let mut b: Board = [0; 81];
+        for row in 0..9 {
+            for col in 0..9 {
+                let shift = row * 3 + row / 3;
+                b[row * 9 + col] = (((col + shift) % 9) + 1) as u8;
+            }
+        }
+        b
+    }
+
+    #[test]
+    fn validate_accepts_a_solved_board() {
+        assert_eq!(validate(&solved_board()), Vec::new());
+    }
+
+    #[test]
+    fn validate_accepts_an_empty_board() {
+        assert_eq!(validate(&blank_board()), Vec::new());
+    }
+
+    #[test]
+    fn validate_ignores_blank_cells() {
+        // A board that is all blanks except for two 5s stacked in the same
+        // column but different boxes should report nothing except that
+        // column conflict, and blanks themselves are never conflicts.
+        let mut board = blank_board();
+        board[0] = 5; // row 0, col 0, box 0
+        board[6 * 9] = 5; // row 6, col 0, box 6
+        assert_eq!(validate(&board), vec![Conflict::Column { col: 0, digit: 5 }]);
+    }
+
+    #[test]
+    fn validate_finds_a_row_conflict() {
+        let mut board = solved_board();
+        board[1] = board[0]; // duplicate row 0's first digit into its second cell
+        let conflicts = validate(&board);
+        assert!(conflicts.contains(&Conflict::Row {
+            row: 0,
+            digit: board[0]
+        }));
+    }
+
+    #[test]
+    fn validate_finds_a_column_conflict() {
+        let mut board = solved_board();
+        board[9] = board[0]; // row 1, col 0 now matches row 0, col 0
+        let conflicts = validate(&board);
+        assert!(conflicts.contains(&Conflict::Column {
+            col: 0,
+            digit: board[0]
+        }));
+    }
+
+    #[test]
+    fn validate_finds_a_box_conflict() {
+        let mut board = solved_board();
+        // (0, 0) and (1, 1) are both in box 0 but start out different.
+        board[9 + 1] = board[0];
+        let conflicts = validate(&board);
+        assert!(conflicts.contains(&Conflict::Box {
+            index: 0,
+            digit: board[0]
+        }));
+    }
+
+    #[test]
+    fn validate_reports_multiple_independent_conflicts() {
+        let mut board = solved_board();
+        board[1] = board[0]; // row 0 conflict at (0, 1)
+        board[5 * 9 + 3] = board[6 * 9 + 3]; // unrelated column 3 conflict between rows 5 and 6
+        let conflicts = validate(&board);
+        assert!(conflicts.contains(&Conflict::Row {
+            row: 0,
+            digit: board[0]
+        }));
+        assert!(conflicts.contains(&Conflict::Column {
+            col: 3,
+            digit: board[6 * 9 + 3]
+        }));
     }
 }
